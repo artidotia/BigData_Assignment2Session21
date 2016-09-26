@@ -1,0 +1,123 @@
+execute the command to transfer data into HDFS
+flume-ng agent -n agent1 --conf-file /home/acadgild/mainproject/flume_two.conf -DFlume.root.logger=INFO,console
+
+Schema 
+0 Date received
+1 Product
+2 Sub-product
+3 Issue
+4 Sub-issue
+5 Consumer complaint narrative
+6 Company public response
+7 Company
+8 State
+9 ZIP code
+10 Submitted via
+11 Date sent to company
+12 Company response to consumer
+13 Timely response?
+14 Consumer disputed
+15 Complaint ID
+
+*************************************************************************************************
+Execute the pig scripts
+*************************************************************************************************
+
+
+(A)Write a pig script to find no of complaints which got timely response
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+REGISTER /home/acadgild/piggybank-0.11.0.jar ;
+DEFINE CSVLoader org.apache.pig.piggybank.storage.CSVLoader();
+CustomerData = LOAD '/user/acadgild/mainproject1_log/' USING  CSVLoader AS (Date_Recieved : chararray , Product : chararray, SubProduct :chararray, Issue :chararray , SubIssue : chararray, Narrative : chararray , Public_Response : chararray,  Company : chararray , State_Cust :Chararray, ZIPcode : chararray ,Submitted_Via : chararray, Date_Sent : chararray, Company_Response :chararray , Timely_Response : chararray , Consumer_Disputed:Chararray , Complaint_Id :chararray ) ;
+Data1 = FOREACH CustomerData GENERATE Complaint_Id, Timely_Response  ;
+Data2 = FILTER Data1 BY (Timely_Response =='Yes')  ;
+DataGrp  = GROUP Data2 BY Timely_Response ;
+NumResp = FOREACH DataGrp GENERATE COUNT(Data2.Complaint_Id) ;
+STORE NumResp INTO '/user/acadgild/project_set1' USING PigStorage(',') ;
+
+To execute: pig -x mapreduce /home/acadgild/mainproject/pigscript1.pig
+Result can be found at: /user/acadgild/project_set1/part-r-00000
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(B) Write a pig script to find no of complaints where consumer forum forwarded the complaint
+same day they received to respective company
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+REGISTER /home/acadgild/piggybank-0.11.0.jar ;
+DEFINE CSVLoader org.apache.pig.piggybank.storage.CSVLoader();
+Customerdata = LOAD '/user/acadgild/mainproject1_log/' USING  CSVLoader AS (Date_Recieved : chararray , Product : chararray, SubProduct :chararray, Issue :chararray , SubIssue : chararray, Narrative : chararray , Public_Response : chararray,  Company : chararray , State_Cust :Chararray, ZIPcode : chararray ,Submitted_Via : chararray, Date_Sent : chararray, Company_Response :chararray , Timely_Response : chararray , Consumer_Disputed:Chararray , Complaint_Id :chararray ) ;
+Data1 = FOREACH Customerdata GENERATE Complaint_Id, Date_Recieved, Date_Sent  ;
+Data2 = FILTER Data1 BY (Date_Recieved == Date_Sent )  ;
+DataGrp = GROUP Data2 ALL ;
+Num = FOREACH DataGrp GENERATE COUNT(Data2) ;
+STORE Num INTO '/user/acadgild/project_set2' USING PigStorage(',') ;
+
+To execute: pig -x mapreduce /home/acadgild/mainproject/pigscript2.pig
+Result can be found at: /user/acadgild/project_set2/part-r-00000
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(C) Write a pig script to find list of companies toping in complaint chart (companies with
+maximum number of complaints)
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+REGISTER /home/acadgild/piggybank-0.11.0.jar ;
+DEFINE CSVExcelStorage org.apache.pig.piggybank.storage.CSVExcelStorage ;
+Customerdata = LOAD '/user/acadgild/mainproject1_log/' USING  CSVExcelStorage AS (Date_Recieved : chararray , Product : chararray, SubProduct :chararray, Issue :chararray , SubIssue : chararray, Narrative : chararray , Public_Response : chararray,  Company : chararray , State_Cust :Chararray, ZIPcode : chararray ,Submitted_Via : chararray, Date_Sent : chararray, Company_Response :chararray , Timely_Response : chararray , Consumer_Disputed:Chararray , Complaint_Id :chararray ) ;
+Data1 = FILTER Customerdata BY ((Date_Recieved IS NOT null) AND (Product IS NOT null) AND (SubProduct IS NOT null) AND (Issue IS NOT null) AND (SubIssue IS NOT null) AND (Narrative IS NOT null) AND (Company IS NOT null) AND (Public_Response IS NOT null))  ;
+Data2 = FOREACH Data1 GENERATE Company, Complaint_Id ;
+DataGrp = GROUP Data2 BY Company ;
+ComplaintChart = FOREACH DataGrp GENERATE group,COUNT(Data2.Complaint_Id) AS TotalCount;
+ComplaintChartOrder = ORDER ComplaintChart BY TotalCount DESC ;
+STORE ComplaintChartOrder INTO '/user/acadgild/project_set3' USING PigStorage('\t') ;
+
+To execute: pig -x mapreduce /home/acadgild/mainproject/pigscript3.pig
+Result can be found at: /user/acadgild/project_set3/part-r-00000
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(D) Write a pig script to find no of complaints filed with product type has debt
+collection for the year 2015
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+REGISTER /home/acadgild/piggybank-0.11.0.jar ;
+DEFINE CSVExcelStorage org.apache.pig.piggybank.storage.CSVExcelStorage ;
+Customerdata = LOAD '/user/acadgild/mainproject1_log/' USING  CSVExcelStorage AS (Date_Recieved : chararray , Product : chararray, SubProduct :chararray, Issue :chararray , SubIssue : chararray, Narrative : chararray , Public_Response : chararray,  Company : chararray , State_Cust :Chararray, ZIPcode : chararray ,Submitted_Via : chararray, Date_Sent : chararray, Company_Response :chararray , Timely_Response : chararray , Consumer_Disputed:Chararray , Complaint_Id :chararray ) ;
+Data1 = FILTER Customerdata BY ((Date_Recieved IS NOT null) AND (Product IS NOT null) AND ((int)SUBSTRING(Date_Recieved, 6, 10) == 2015) AND (Product == 'Debt collection')) ;
+Data2 = FOREACH Data1 GENERATE (int)SUBSTRING(Date_Recieved, 6, 10) as Year,  Product ;
+DataGrp = GROUP Data2 BY Year ;
+NumofComp = FOREACH DataGrp GENERATE group,COUNT(Data2.Product) AS TotalCount;
+STORE NumofComp INTO '/user/acadgild/project_set4' USING PigStorage(',') ;
+
+To execute: pig -x mapreduce /home/acadgild/mainproject/pigscript4.pig
+Result can be found at: /user/acadgild/project_set4/part-r-00000
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+*************************************************************************************************
+Results to be exported into RDBMS using SQOOP
+*************************************************************************************************
+
+sudo service mysqld start
+mysql -u root
+
+mysql> USE acdproject;
+
+mysql> create table Projectset1 (TRCnt BIGINT(15)) ;
+mysql> create table Projectset2 (SameDayCnt BIGINT(15)) ;
+mysql> create table Projectset3 (Company varchar(100),TotalCnt BIGINT(15)) ;
+mysql> create table Projectset4 (Year INT(4),TotalCnt BIGINT(15)) ;
+
+sqoop export --connect jdbc:mysql://localhost/acdproject --table Projectset1 --export-dir /user/acadgild/project_set1/part-r-00000 --fields-terminated-by ',' --username root
+
+sqoop export --connect jdbc:mysql://localhost/acdproject --table Projectset2 --export-dir /user/acadgild/project_set2/part-r-00000 --fields-terminated-by ',' --username root
+
+sqoop export --connect jdbc:mysql://localhost/acdproject --table Projectset3 --export-dir /user/acadgild/project_set3/part-r-00000 --fields-terminated-by '\t' --username root
+
+sqoop export --connect jdbc:mysql://localhost/acdproject --table Projectset4 --export-dir /user/acadgild/project_set4/part-r-00000 --fields-terminated-by ',' --username root
+
+mysql> select * from Projectset1;
+mysql> select * from Projectset2;
+mysql> select * from Projectset3;
+mysql> select * from Projectset4;
+
+*************************************************************************************************
+
